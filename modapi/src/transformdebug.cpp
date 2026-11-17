@@ -252,6 +252,30 @@ namespace {
                     sphere[0], sphere[1], sphere[2], sphere[3]);
             }
         }
+        // every resource whose mesh is used by one of the first 200 transforms
+        std::unordered_map<uintptr_t, uint32_t> meshid;
+        if (canvas && rescount < 100000 && resarray && meshes) {
+            for (uint32_t r = 0; r < rescount; ++r) {
+                uintptr_t entry = 0;
+                uint16_t id = 0;
+                int32_t slot = -1;
+                uintptr_t mesh = 0;
+                if (rd(resarray + r * 4, entry) && entry && rd(entry, id) && rd(entry + 8, slot) && slot >= 0 && rd(meshes + slot * 4, mesh) && mesh)
+                    meshid[mesh] = id;
+            }
+        }
+        std::fprintf(f, "\n=== resource id of the meshes of transforms 0..199 ===\n");
+        for (const Info& info : infos) {
+            if (info.index >= 200)
+                break;
+            for (uintptr_t mesh : info.meshptrs) {
+                auto it = meshid.find(mesh);
+                float sphere[4] = {};
+                rdbuf(mesh + 0x3C, sphere, sizeof(sphere));
+                std::fprintf(f, "transform %u mesh %08X id %s%04X sphere=(%g %g %g %g)\n", info.index, static_cast<unsigned>(mesh),
+                    it == meshid.end() ? "?" : "", it == meshid.end() ? 0u : it->second, sphere[0], sphere[1], sphere[2], sphere[3]);
+            }
+        }
         std::fprintf(f, "\n=== mesh of each transform with a parent or children (+0x3C sphere) ===\n");
         for (const Info& info : infos) {
             if (info.childptrs.empty() && !parentof.count(info.ptr))
