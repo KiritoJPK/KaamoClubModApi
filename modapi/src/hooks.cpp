@@ -3,6 +3,7 @@
 #include "hooks.h"
 #include "hookcontext.h"
 #include "safety.h"
+#include "langcompat.h"
 #include <Game/system.h>
 #include <Game/level.h>
 #include <Game/ship.h>
@@ -468,6 +469,13 @@ AEString* __stdcall Hooks::gametext_gettext_hook_impl()
                 return &customstring;
             }
         }
+    }
+    // .lang files of macOS / iOS / Android have 10 texts more than the PC ones,
+    // ids are translated so these files can be used too
+    if (LangCompat::layout() == LangCompat::Layout::Mobile) {
+        result = LangCompat::get_text(id);
+        if (result)
+            return result;
     }
     __asm {
         mov eax, id

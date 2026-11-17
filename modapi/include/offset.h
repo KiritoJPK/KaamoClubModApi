@@ -23,6 +23,7 @@ class Offset {
         static constexpr uintptr_t GLOBALS_GETDIALOGUESOUNDID = 0x44DAC3;
         static constexpr uintptr_t GLOBALS_GETSHIPGROUP = 0x44CF2E;
         static constexpr uintptr_t GLOBALS_FONT = 0x60ADCC;
+        static constexpr uintptr_t GLOBALS_GAMETEXT = 0x60ADD4;
         static constexpr uintptr_t GLOBALS_SOUND = 0x60AF70;
         static constexpr uintptr_t GLOBALS_W = 0x60AF00;
         static constexpr uintptr_t GLOBALS_H = 0x60AE80;
