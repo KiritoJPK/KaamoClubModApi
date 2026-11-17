@@ -4,6 +4,7 @@
 #include "hookcontext.h"
 #include "safety.h"
 #include "langcompat.h"
+#include "datapaths.h"
 #include <Game/system.h>
 #include <Game/level.h>
 #include <Game/ship.h>
@@ -2113,6 +2114,8 @@ void Hooks::init()
         Safety::enter_safe_mode(std::string("MinHook could not be initialized: ") + MH_StatusToString(initstatus));
         return;
     }
+    // before the game initializes its globals (texts and sounds are loaded there)
+    DataPaths::apply();
     MH_CreateHook((LPVOID)Offset::GLOBALS_INIT_ADDR, &globals_init_hook, (LPVOID*)&oldglobals_init);
     MH_CreateHook((LPVOID)Offset::FILEREAD_LOADSTATIONBINARYFROMID, &fileread_loadstationbinaryfromid_hook, (LPVOID*)&old_filereadloadstationbinaryfromid);
     MH_CreateHook((LPVOID)Offset::FILEREAD_LOADSTATIONBIRARY, &fileread_loadstationbinary_hook, (LPVOID*)&old_filereadloadstationbinary);

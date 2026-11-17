@@ -2,6 +2,7 @@
 #include "offset.h"
 #include <Game/structs.h>
 #include "safety.h"
+#include "datapaths.h"
 #include <cstddef>
 #include <cstring>
 #include <initializer_list>
@@ -178,7 +179,7 @@ int32_t LangCompat::current_language()
 
 void __stdcall LangCompat::loadlanguage_hook(void* gametext, int32_t language)
 {
-    const std::string folder = "data\\assets\\main\\lang\\";
+    const std::string folder = DataPaths::lang_folder();
     int16_t index = static_cast<int16_t>(language);
     int32_t count = count_texts(folder + language_file(index));
     // the game falls back to gb.lang when the file can't be loaded
