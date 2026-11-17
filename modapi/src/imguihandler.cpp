@@ -270,6 +270,11 @@ void ImGuiHandler::init(LuaManager *luamanager)
 {
     _luamanager = luamanager;
     uintptr_t addr = get_endscene();
+    if (addr == 0 || resetaddr == 0) {
+        // without EndScene there is no overlay, no lua update and no event dispatch, so say it instead of hooking address 0
+        std::cout << "[-] ImGuiHandler: could not find IDirect3DDevice9::EndScene / Reset, the overlay and the lua updates are disabled" << std::endl;
+        return;
+    }
     IDirectInput8 *dinput = nullptr;
     if (SUCCEEDED(DirectInput8Create(GetModuleHandleA(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8, reinterpret_cast<void**>(&dinput), nullptr))) {
         IDirectInputDevice8 *dev = nullptr;
@@ -292,9 +297,13 @@ void ImGuiHandler::init(LuaManager *luamanager)
     MH_CreateHook(GetProcAddress(user32module, "GetAsyncKeyState"), reinterpret_cast<void*>(getasynckeystate_hook), reinterpret_cast<void**>(&old_getasynckeystate));
     MH_CreateHook(GetProcAddress(user32module, "GetKeyState"), reinterpret_cast<void*>(getkeystate_hook), reinterpret_cast<void**>(&old_getkeystate));
     MH_CreateHook(GetProcAddress(user32module, "ShowCursor"), reinterpret_cast<void*>(showcursor_hook), reinterpret_cast<void**>(&old_showcursor));
-    MH_CreateHook(reinterpret_cast<void*>(addr), reinterpret_cast<void*>(endscene_hook), reinterpret_cast<void**>(&old_endscene));
-    MH_CreateHook(reinterpret_cast<void*>(resetaddr), reinterpret_cast<void*>(reset_hook), reinterpret_cast<void**>(&old_reset));
-    MH_EnableHook(MH_ALL_HOOKS);
+    MH_STATUS endscenestatus = MH_CreateHook(reinterpret_cast<void*>(addr), reinterpret_cast<void*>(endscene_hook), reinterpret_cast<void**>(&old_endscene));
+    MH_STATUS resetstatus = MH_CreateHook(reinterpret_cast<void*>(resetaddr), reinterpret_cast<void*>(reset_hook), reinterpret_cast<void**>(&old_reset));
+    if (endscenestatus != MH_OK || resetstatus != MH_OK)
+        std::cout << "[-] ImGuiHandler: EndScene/Reset hooks failed (" << MH_StatusToString(endscenestatus) << " / " << MH_StatusToString(resetstatus) << "), the overlay and the lua updates may not work" << std::endl;
+    MH_STATUS enablestatus = MH_EnableHook(MH_ALL_HOOKS);
+    if (enablestatus != MH_OK)
+        std::cout << "[-] ImGuiHandler: MH_EnableHook failed: " << MH_StatusToString(enablestatus) << std::endl;
 }
 
 void ImGuiHandler::shutdown()

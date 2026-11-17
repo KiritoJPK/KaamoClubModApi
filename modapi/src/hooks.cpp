@@ -2,6 +2,7 @@
 #include "abyssengine.h"
 #include "hooks.h"
 #include "hookcontext.h"
+#include "safety.h"
 #include <Game/system.h>
 #include <Game/level.h>
 #include <Game/ship.h>
@@ -101,44 +102,30 @@ void Hooks::injectships()
     ships.data = newship_data;
     ships.size = total;
     ships.size2 = total;
-    DWORD oldp;
     // we are going to use our own array in the diff functions instead of the rdata arrays
+    // The last argument is the array the instruction operand points to in the original exe, it is only
+    // used to warn when the exe is not the one these addresses were made for (the value is written anyway).
     // ship races (engine colors)
-    VirtualProtect(reinterpret_cast<LPVOID>(0x00467912), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x00467912) = reinterpret_cast<DWORD>(new_races);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x00467912), 4, oldp, &oldp);
+    Safety::write_pointer(0x00467912, new_races, "ship races array", Offset::SHIP_RACES);
     // hangar offset
-    VirtualProtect(reinterpret_cast<LPVOID>(0x0040512E), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x0040512E) = reinterpret_cast<DWORD>(newhangaroffsets_one);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x00472CC0), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x00472CC0) = reinterpret_cast<DWORD>(newhangaroffsets_two);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x004730A4), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x004730A4) = reinterpret_cast<DWORD>(newhangaroffsets_two);
+    Safety::write_pointer(0x0040512E, newhangaroffsets_one, "hangar offsets array", Offset::SHIP_HANGAR_OFFSETS);
+    Safety::write_pointer(0x00472CC0, newhangaroffsets_two, "hangar offsets 2 array", Offset::SHIP_HANGAR_OFFSETS2);
+    Safety::write_pointer(0x004730A4, newhangaroffsets_two, "hangar offsets 2 array", Offset::SHIP_HANGAR_OFFSETS2);
     // meshes array
-    VirtualProtect(reinterpret_cast<LPVOID>(0x0044D58F), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x0044D58F) = reinterpret_cast<DWORD>(meshes);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x0044D5BD), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x0044D5BD) = reinterpret_cast<DWORD>(lights);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x0044D64E), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x0044D64E) = reinterpret_cast<DWORD>(lights2);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x0044D674), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x0044D674) = reinterpret_cast<DWORD>(lights2);
+    Safety::write_pointer(0x0044D58F, meshes, "ship meshes array", Offset::SHIP_MESHES);
+    Safety::write_pointer(0x0044D5BD, lights, "ship meshes (no light) array", Offset::SHIP_MESHES_NO_LIGHT);
+    Safety::write_pointer(0x0044D64E, lights2, "ship meshes (add lights) array", Offset::SHIP_MESHES_ADD_LIGHTS);
+    Safety::write_pointer(0x0044D674, lights2, "ship meshes (add lights) array", Offset::SHIP_MESHES_ADD_LIGHTS);
     // available lods array
-    VirtualProtect(reinterpret_cast<LPVOID>(0x0044D701), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x0044D701) = reinterpret_cast<DWORD>(lods);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x0044D834), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x0044D834) = reinterpret_cast<DWORD>(lightlods);
+    Safety::write_pointer(0x0044D701, lods, "ship lods array", Offset::SHIP_LODS);
+    Safety::write_pointer(0x0044D834, lightlods, "ship light lods array", Offset::SHIP_LIGHT_LODS);
     // UI ships mesh preview
-    VirtualProtect(reinterpret_cast<LPVOID>(0x00481059), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x00481059) = reinterpret_cast<DWORD>(ui_meshes_1);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x00481085), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x00481085) = reinterpret_cast<DWORD>(ui_meshes_2);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x004810A5), 4, PAGE_EXECUTE_READWRITE, &oldp);
-    *reinterpret_cast<DWORD*>(0x004810A5) = reinterpret_cast<DWORD>(ui_meshes_2);
+    Safety::write_pointer(0x00481059, ui_meshes_1, "ui ship meshes array", 0x0052F288);
+    Safety::write_pointer(0x00481085, ui_meshes_2, "ui ship meshes 2 array", 0x0052F2E0);
+    Safety::write_pointer(0x004810A5, ui_meshes_2, "ui ship meshes 2 array", 0x0052F2E0);
     // if ( shipid < 44 ) is nopped now | required to draw the ship spriteicon on previews
-    VirtualProtect(reinterpret_cast<LPVOID>(0x00487D3A), 5, PAGE_EXECUTE_READWRITE, &oldp);
-    std::memset(reinterpret_cast<void*>(0x00487D3A), 0x90, 5);
-    VirtualProtect(reinterpret_cast<LPVOID>(0x00487D3A), 5, oldp, &oldp);
+    const uint8_t nops[5] = { 0x90, 0x90, 0x90, 0x90, 0x90 };
+    Safety::write_bytes(0x00487D3A, nops, sizeof(nops), "ship id check on previews");
 }
 
 void Hooks::injectsystemsandstations()
@@ -786,11 +773,12 @@ int __stdcall Hooks::dialoguewindow_loadcontent_hook(int *a1)
         DWORD callsite = 0x407617;
         DWORD target = reinterpret_cast<DWORD>(&globals_getdialoguesoundid_retpatch);
         DWORD relativeoffset = target - (callsite + 5);
-        DWORD old;
-        VirtualProtect(reinterpret_cast<void*>(callsite), 5, PAGE_EXECUTE_READWRITE, &old);
-        *reinterpret_cast<BYTE*>(callsite) = 0xe8;
-        *reinterpret_cast<DWORD*>((callsite + 1)) = relativeoffset;
-        VirtualProtect(reinterpret_cast<void*>(callsite), 5, old, &old);
+        // it is a call both in the original exe and after our patch, anything else means a different exe
+        if (Safety::expect_byte_in(callsite, { 0xE8 }, "dialogue sound id call site")) {
+            uint8_t patch[5] = { 0xE8 };
+            std::memcpy(patch + 1, &relativeoffset, sizeof(relativeoffset));
+            Safety::write_bytes(callsite, patch, sizeof(patch), "dialogue sound id call site");
+        }
     }
     return old_dialoguewindowloadcontent(a1);
 }
@@ -2105,9 +2093,18 @@ int* __stdcall Hooks::dialoguewindow_update_hook(int a2)
     return nullptr;
 }
 
+// From here on every MH_CreateHook of this file goes through Safety::create_game_hook: it checks the address
+// (must be inside an executable section of GOF2.exe) and the MinHook status, logs the failures and records
+// the hook so the crash logs can name game addresses.
+#define MH_CreateHook(target, detour, original) Safety::create_game_hook(#target, (void*)(target), (void*)(detour), (void**)(original))
+
 void Hooks::init()
 {
-    MH_Initialize();
+    MH_STATUS initstatus = MH_Initialize();
+    if (initstatus != MH_OK && initstatus != MH_ERROR_ALREADY_INITIALIZED) {
+        Safety::enter_safe_mode(std::string("MinHook could not be initialized: ") + MH_StatusToString(initstatus));
+        return;
+    }
     MH_CreateHook((LPVOID)Offset::GLOBALS_INIT_ADDR, &globals_init_hook, (LPVOID*)&oldglobals_init);
     MH_CreateHook((LPVOID)Offset::FILEREAD_LOADSTATIONBINARYFROMID, &fileread_loadstationbinaryfromid_hook, (LPVOID*)&old_filereadloadstationbinaryfromid);
     MH_CreateHook((LPVOID)Offset::FILEREAD_LOADSTATIONBIRARY, &fileread_loadstationbinary_hook, (LPVOID*)&old_filereadloadstationbinary);
@@ -2186,7 +2183,19 @@ void Hooks::init()
     //MH_CreateHook((LPVOID)Offset::DIALOGUEWINDOW_INIT, (LPVOID)&dialoguewindow_init_hook, (LPVOID*)&old_dialoguewindowinit);
     //MH_CreateHook((LPVOID)Offset::DIALOGUEWINDOW_DRAW, (LPVOID)&dialoguewindow_draw_hook, (LPVOID*)&old_dialoguewindowdraw);
     //MH_CreateHook((LPVOID)Offset::DIALOGUEWINDOW_UPDATE, (LPVOID)&dialoguewindow_update_hook, (LPVOID*)&old_dialoguewindowupdate);
-    MH_EnableHook(MH_ALL_HOOKS);
+    std::string reason;
+    if (!Safety::hooks_acceptable(&reason)) {
+        Safety::enter_safe_mode(reason);
+        MH_Uninitialize(); // disables and removes every hook that was created, the game stays untouched
+        return;
+    }
+    MH_STATUS enablestatus = MH_EnableHook(MH_ALL_HOOKS);
+    if (enablestatus != MH_OK) {
+        Safety::enter_safe_mode(std::string("MinHook could not enable the hooks: ") + MH_StatusToString(enablestatus));
+        MH_Uninitialize();
+        return;
+    }
+    std::cout << "[+] " << (Safety::hooks().size() - Safety::failed_hook_count()) << "/" << Safety::hooks().size() << " game hooks installed" << std::endl;
 }
 
 /*

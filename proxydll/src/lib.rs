@@ -12,6 +12,34 @@ use winapi::um::synchapi::Sleep;
 use std::ptr;
 use std::ffi::CString;
 use std::mem;
+use std::os::raw::c_char;
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetSystemDirectoryA(lpBuffer: *mut c_char, uSize: u32) -> u32;
+    fn OutputDebugStringA(lpOutputString: *const c_char);
+}
+
+/// Full path of the real d3d9.dll. The folder comes from GetSystemDirectoryA so it also works when Windows
+/// is not installed in C:\Windows (for a 32 bit process this is SysWOW64 on a 64 bit Windows).
+fn system_d3d9_path() -> CString {
+    let mut buffer = [0 as c_char; MAX_PATH];
+    let len = unsafe { GetSystemDirectoryA(buffer.as_mut_ptr(), MAX_PATH as u32) } as usize;
+    // raw bytes on purpose, the path is in the ANSI code page and must not go through utf8
+    let mut path: Vec<u8> = if len > 0 && len < MAX_PATH {
+        buffer[..len].iter().map(|&c| c as u8).collect()
+    } else {
+        b"C:\\Windows\\System32".to_vec()
+    };
+    path.extend_from_slice(b"\\d3d9.dll");
+    CString::new(path).unwrap_or_else(|_| CString::new("d3d9.dll").unwrap())
+}
+
+fn debug_log(message: &str) {
+    if let Ok(text) = CString::new(format!("[KaamoClubModApi proxy] {}\n", message)) {
+        unsafe { OutputDebugStringA(text.as_ptr()) };
+    }
+}
 
 type _D3DCreate9 = extern "stdcall" fn(UINT) -> *mut d3d9::IDirect3D9;
 type _D3DPERF_SetOptions = extern "stdcall" fn(DWORD);
@@ -24,7 +52,8 @@ static mut pD3DPERF_SetOptions: Option<_D3DPERF_SetOptions> = None;
 pub unsafe extern "system" fn D3DPERF_SetOptions(dwOptions: DWORD) {
     match pD3DPERF_SetOptions {
         Some(func) => func(dwOptions),
-        None => panic!("SetOptions panic")
+        // a panic here would abort the whole game, there is nothing useful to do without the real function
+        None => ()
     }
 }
 
@@ -32,7 +61,8 @@ pub unsafe extern "system" fn D3DPERF_SetOptions(dwOptions: DWORD) {
 pub unsafe extern "stdcall" fn Direct3DCreate9(SDKVersion: UINT) -> *mut IDirect3D9 {
     match pDirect3DCreate9 {
         Some(func) => func(SDKVersion),
-        None => panic!("Direct3DCreate9 panic")
+        // null is what the real function returns on failure, the game reports it its own way
+        None => ptr::null_mut()
     }
 }
 
@@ -58,16 +88,21 @@ unsafe extern "system" fn load_payload(_: LPVOID) -> DWORD {
 
 fn initialize() {
     unsafe {
-        hOriginal = LoadLibraryA(CString::new("C:\\Windows\\System32\\d3d9.dll").unwrap().as_ptr());
-        if !hOriginal.is_null() {
-            pDirect3DCreate9 = Some(mem::transmute(
-                GetProcAddress(hOriginal, CString::new("Direct3DCreate9").unwrap().as_ptr())
-            ));
-            pD3DPERF_SetOptions = Some(mem::transmute(
-                GetProcAddress(hOriginal, CString::new("D3DPERF_SetOptions").unwrap().as_ptr())
-            ));
+        hOriginal = LoadLibraryA(system_d3d9_path().as_ptr());
+        if hOriginal.is_null() {
+            // no panic: inside DllMain it kills the process without any message
+            debug_log("could not load the real d3d9.dll from the system folder");
+            return;
+        }
+        let create = GetProcAddress(hOriginal, CString::new("Direct3DCreate9").unwrap().as_ptr());
+        if !create.is_null() {
+            pDirect3DCreate9 = Some(mem::transmute(create));
         } else {
-            panic!("Couldn't find d3d9.dll on the system");
+            debug_log("Direct3DCreate9 was not found in the real d3d9.dll");
+        }
+        let setoptions = GetProcAddress(hOriginal, CString::new("D3DPERF_SetOptions").unwrap().as_ptr());
+        if !setoptions.is_null() {
+            pD3DPERF_SetOptions = Some(mem::transmute(setoptions));
         }
         let mut buffer = [0i8; MAX_PATH];
         let len = GetModuleFileNameA(ptr::null_mut(), buffer.as_mut_ptr(), MAX_PATH as u32);
@@ -80,7 +115,8 @@ fn initialize() {
         }
         let thread = CreateThread(ptr::null_mut(), 0, Some(load_payload), ptr::null_mut(), 0, ptr::null_mut(),);
         if thread.is_null() {
-            panic!("[-] Failed to create loader thread");
+            debug_log("failed to create the loader thread, the mod api will not start");
+            return;
         }
         winapi::um::handleapi::CloseHandle(thread);
     }

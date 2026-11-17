@@ -60,6 +60,23 @@ That's it. xmake handles the rest so both the C++ modapi and the Rust proxy dll.
 
 ---
 
+## Troubleshooting
+
+Every offset of the api is an absolute address inside one specific `GOF2.exe`. At startup the api prints a fingerprint of your exe in the console:
+
+```
+[+] GOF2.exe fingerprint: base=0x00400000 timestamp=0x... sizeofimage=0x... checksum=0x... entry=0x... codecrc32=0x... (build not in the known builds table)
+```
+
+- **Safe mode**: if the exe is loaded at another address (ASLR), if the `Globals::init` hook can't be installed, or if more than 25% of the hooks fail, the api disables itself for that session, shows a message box and the game runs without mods. This is almost always a different `GOF2.exe` build than the one the api was made for.
+- **A hook that fails** (but not enough to trigger safe mode) is printed as `[-] hook NAME (0xADDRESS) was not installed: reason`; the mods that depend on it won't work.
+- **Crash logs**: a crash writes `crashlogs/crash_<time>.txt` and a matching `.dmp` minidump. The text log lists the exe fingerprint, the loaded mods, the hooks that failed to install, and names game addresses (`GOF2.exe+0xRVA | near HOOK_NAME+0xOFFSET`). Please attach it to your bug reports.
+- Mods are loaded in alphabetical order of their folder name.
+
+If you tested the api with another `GOF2.exe`, add its fingerprint to `kKnownBuilds` in `modapi/src/safety.cpp`.
+
+---
+
 ## Contributors
 
 Thanks to everyone who helped make this happen:
