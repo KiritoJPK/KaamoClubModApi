@@ -228,6 +228,50 @@ namespace {
                 break;
             address = next;
         }
+        // mesh resources (PaintCanvas +0x144 count, +0x148 entries: +0 id, +8 slot in +0x38 meshes);
+        // a transform may hold a copy of the mesh, so the bounding sphere (+0x3C) is printed to match them
+        std::fprintf(f, "\n=== mesh resources of the deep science station ===\n");
+        uint32_t rescount = 0;
+        uintptr_t resarray = 0, meshes = 0;
+        if (canvas && rd(canvas + 0x144, rescount) && rd(canvas + 0x148, resarray) && rd(canvas + 0x38, meshes) && rescount < 100000) {
+            for (uint32_t r = 0; r < rescount; ++r) {
+                uintptr_t entry = 0;
+                uint16_t id = 0;
+                int32_t slot = -1;
+                if (!rd(resarray + r * 4, entry) || !entry || !rd(entry, id))
+                    continue;
+                bool wanted = (id >= 0x4222 && id <= 0x422A) || (id >= 0x381F && id <= 0x3825);
+                if (!wanted)
+                    continue;
+                rd(entry + 8, slot);
+                uintptr_t mesh = 0;
+                float sphere[4] = {};
+                if (slot >= 0 && rd(meshes + slot * 4, mesh) && mesh)
+                    rdbuf(mesh + 0x3C, sphere, sizeof(sphere));
+                std::fprintf(f, "id %04X slot %d mesh %08X sphere=(%g %g %g %g)\n", id, static_cast<int>(slot), static_cast<unsigned>(mesh),
+                    sphere[0], sphere[1], sphere[2], sphere[3]);
+            }
+        }
+        std::fprintf(f, "\n=== mesh of each transform with a parent or children (+0x3C sphere) ===\n");
+        for (const Info& info : infos) {
+            if (info.childptrs.empty() && !parentof.count(info.ptr))
+                continue;
+            for (uintptr_t mesh : info.meshptrs) {
+                float sphere[4] = {};
+                rdbuf(mesh + 0x3C, sphere, sizeof(sphere));
+                std::fprintf(f, "transform %u mesh %08X sphere=(%g %g %g %g)\n", info.index, static_cast<unsigned>(mesh),
+                    sphere[0], sphere[1], sphere[2], sphere[3]);
+            }
+        }
+        for (uint32_t extra : { 8u }) {
+            if (extra < infos.size())
+                for (uintptr_t mesh : infos[extra].meshptrs) {
+                    float sphere[4] = {};
+                    rdbuf(mesh + 0x3C, sphere, sizeof(sphere));
+                    std::fprintf(f, "transform %u mesh %08X sphere=(%g %g %g %g)\n", extra, static_cast<unsigned>(mesh),
+                        sphere[0], sphere[1], sphere[2], sphere[3]);
+                }
+        }
         std::fclose(f);
         g_infos = std::move(infos);
         g_status = "transform_dump.txt written (" + std::to_string(g_infos.size()) + " transforms)";
