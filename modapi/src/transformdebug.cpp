@@ -264,6 +264,31 @@ namespace {
                     meshid[mesh] = id;
             }
         }
+        // every resource entry whose slot points to a mesh of transforms 1..10, with its raw bytes
+        // (textures share the slot numbers, the raw bytes tell meshes and textures apart)
+        std::fprintf(f, "\n=== resource entries using the slots of the meshes of transforms 1..10 ===\n");
+        if (canvas && rescount < 100000 && resarray && meshes) {
+            std::unordered_map<uintptr_t, uint32_t> wantedmesh;
+            for (const Info& info : infos)
+                if (info.index >= 1 && info.index <= 10)
+                    for (uintptr_t mesh : info.meshptrs)
+                        wantedmesh[mesh] = info.index;
+            for (uint32_t r = 0; r < rescount; ++r) {
+                uintptr_t entry = 0;
+                uint16_t id = 0;
+                int32_t slot = -1;
+                uintptr_t mesh = 0;
+                if (!rd(resarray + r * 4, entry) || !entry || !rd(entry, id) || !rd(entry + 8, slot) || slot < 0 || !rd(meshes + slot * 4, mesh))
+                    continue;
+                auto it = wantedmesh.find(mesh);
+                if (it == wantedmesh.end())
+                    continue;
+                uint32_t raw[8] = {};
+                rdbuf(entry, raw, sizeof(raw));
+                std::fprintf(f, "transform %u id %04X slot %d entry %08X raw %08X %08X %08X %08X %08X %08X %08X %08X\n", it->second, id,
+                    static_cast<int>(slot), static_cast<unsigned>(entry), raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7]);
+            }
+        }
         std::fprintf(f, "\n=== resource id of the meshes of transforms 0..199 ===\n");
         for (const Info& info : infos) {
             if (info.index >= 200)
