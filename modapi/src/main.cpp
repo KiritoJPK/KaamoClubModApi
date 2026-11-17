@@ -5,6 +5,7 @@
 #include "patches.h"
 #include "hooks.h"
 #include "imguihandler.h"
+#include "safety.h"
 #include <Game/system.h>
 #include <Game/level.h>
 #include <Game/engine.h>
@@ -20,24 +21,32 @@ DWORD WINAPI MainThread(LPVOID lpParam)
     freopen_s(&dummyfile, "CONOUT$", "w", stderr);
     freopen_s(&dummyfile, "CONIN$", "r", stdin);
     
-    std::cout << "[+] KaamoClubModAPI Loaded! | Version: 1.0.5" << std::endl;    
-    luamanager->init();
-    luamanager->bind_api();
-    EventManager::lua_manager = luamanager;
-    ModApiUtils::load_mods(luamanager);
-    EventManager::earlyinit_event();
-    Hooks::init();
-    Player::init(luamanager->getluastate());
-    System::init(luamanager->getluastate());
-    Station::init();
-    Mission::init();
-    Asset::init();
-    Item::init();
-    Engine::init();
-    //Ship::init();
-    Level::init(luamanager->getluastate());
-    ImGuiHandler::init(luamanager);
+    std::cout << "[+] KaamoClubModAPI Loaded! | Version: 1.0.5" << std::endl;
+    // Every offset of the api is an absolute address of one specific GOF2.exe. If the exe is not usable
+    // (or the hooks can't be installed) the api goes in safe mode: nothing is hooked and no mod is run.
+    if (Safety::inspect_game_build()) {
+        luamanager->init();
+        luamanager->bind_api();
+        EventManager::lua_manager = luamanager;
+        ModApiUtils::load_mods(luamanager);
+        EventManager::earlyinit_event();
+        Hooks::init();
+    }
+    if (!Safety::safe_mode()) {
+        Player::init(luamanager->getluastate());
+        System::init(luamanager->getluastate());
+        Station::init();
+        Mission::init();
+        Asset::init();
+        Item::init();
+        Engine::init();
+        //Ship::init();
+        Level::init(luamanager->getluastate());
+        ImGuiHandler::init(luamanager);
+    }
     SetUnhandledExceptionFilter(ModApiUtils::crashhandler);
+    if (Safety::safe_mode())
+        Safety::show_safe_mode_notice();
     // a thread waiting to be closed
     while (true) {
         if (!gamehwnd)

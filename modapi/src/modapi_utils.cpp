@@ -15,6 +15,8 @@
 #include <iomanip>
 #include "eventmanager.h"
 #include "abyssengine.h"
+#include "safety.h"
+#include <algorithm>
 #include <Game/player.h>
 #include <Game/system.h>
 #include <Game/station.h>
@@ -44,7 +46,11 @@ std::string ModApiUtils::getexception_name(DWORD code)
         case EXCEPTION_ARRAY_BOUNDS_EXCEEDED: return "ARRAY_BOUNDS_EXCEEDED";
         case EXCEPTION_FLT_DIVIDE_BY_ZERO: return "FLT_DIVIDE_BY_ZERO";
         case EXCEPTION_INT_OVERFLOW: return "INT_OVERFLOW";
-        default: return "what thee helllll";
+        default: {
+            std::ostringstream unknown;
+            unknown << "UNKNOWN_0x" << std::hex << code;
+            return unknown.str();
+        }
     }
 }
 
@@ -60,10 +66,28 @@ LONG WINAPI ModApiUtils::crashhandler(EXCEPTION_POINTERS* ep)
     log << "  KaamoClubModAPI - crash\n";
     log << "  Version: 1.0.5\n";
     log << "========================================\n\n";
+    log << "[Build]\n";
+    log << "  " << Safety::build_summary() << "\n";
+    if (Safety::safe_mode())
+        log << "  Safe mode: " << Safety::safe_mode_reason() << "\n";
+    log << "\n[Mods]\n";
+    if (loaded_mods.empty())
+        log << "  (none)\n";
+    for (const std::string& mod : loaded_mods)
+        log << "  " << mod << "\n";
+    size_t failedhooks = Safety::failed_hook_count();
+    log << "\n[Hooks]\n";
+    log << "  Installed: " << (Safety::hooks().size() - failedhooks) << "/" << Safety::hooks().size() << "\n";
+    for (const Safety::HookRecord& hook : Safety::hooks()) {
+        if (!hook.installed)
+            log << "  FAILED " << hook.name << " (0x" << std::hex << hook.target << std::dec << "): " << hook.error << "\n";
+    }
+    log << "\n";
     DWORD code = ep->ExceptionRecord->ExceptionCode;
     log << "[Exception]\n";
     log << "  Code: " << getexception_name(code) << "\n";
-    log << "  Address: 0x" << std::hex << reinterpret_cast<uintptr_t>(ep->ExceptionRecord->ExceptionAddress) << std::dec << "\n";
+    log << "  Address: 0x" << std::hex << reinterpret_cast<uintptr_t>(ep->ExceptionRecord->ExceptionAddress) << std::dec
+        << Safety::describe_address(reinterpret_cast<uintptr_t>(ep->ExceptionRecord->ExceptionAddress)) << "\n";
     if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
         log << "  Type: " << (ep->ExceptionRecord->ExceptionInformation[0] == 1 ? "WRITE" : "READ") << "\n";
         log << "  Target: 0x" << std::hex << ep->ExceptionRecord->ExceptionInformation[1] << std::dec << "\n";
@@ -102,7 +126,7 @@ LONG WINAPI ModApiUtils::crashhandler(EXCEPTION_POINTERS* ep)
             break;
         if (sf.AddrPC.Offset == 0)
             break;
-        log << "  [" << i << "] 0x" << std::hex << sf.AddrPC.Offset;
+        log << "  [" << i << "] 0x" << std::hex << sf.AddrPC.Offset << Safety::describe_address(static_cast<uintptr_t>(sf.AddrPC.Offset));
         char symbuf[sizeof(SYMBOL_INFO) + 256] = {};
         SYMBOL_INFO* sym = reinterpret_cast<SYMBOL_INFO*>(symbuf);
         sym->SizeOfStruct = sizeof(SYMBOL_INFO);
@@ -127,6 +151,17 @@ LONG WINAPI ModApiUtils::crashhandler(EXCEPTION_POINTERS* ep)
         file.flush();
         file.close();
     }
+    // a minidump next to the text log (open it in Visual Studio / WinDbg, the exe's .text is in it)
+    std::string dumppath = "crashlogs/crash_" + ts + ".dmp";
+    HANDLE dumpfile = CreateFileA(dumppath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (dumpfile != INVALID_HANDLE_VALUE) {
+        MINIDUMP_EXCEPTION_INFORMATION dumpinfo = {};
+        dumpinfo.ThreadId = GetCurrentThreadId();
+        dumpinfo.ExceptionPointers = ep;
+        dumpinfo.ClientPointers = FALSE;
+        MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), dumpfile, static_cast<MINIDUMP_TYPE>(MiniDumpNormal | MiniDumpWithDataSegs | MiniDumpWithThreadInfo), &dumpinfo, nullptr, nullptr);
+        CloseHandle(dumpfile);
+    }
     MessageBoxW(NULL, L"Uh oh, looks like the game crashed.\n\n" L"Crash logs have been saved in the folder \"crashlogs\".", L"Game crash", MB_OK | MB_ICONERROR);
     return EXCEPTION_EXECUTE_HANDLER;
 }
@@ -135,16 +170,24 @@ void ModApiUtils::load_mods(LuaManager *luamanager)
 {    
     if (!std::filesystem::exists("mods") || !std::filesystem::is_directory("mods"))
         std::filesystem::create_directory("mods");
+    // sorted by folder name so the load order is the same on every machine (directory_iterator order is not guaranteed)
+    std::vector<std::filesystem::path> modfolders;
     for (const auto& entry : std::filesystem::directory_iterator("mods")) {
-        if (entry.is_directory()) {
-            std::string mod_path = entry.path().string();
-            std::string init_lua = mod_path + "/init.lua";
-            if (std::filesystem::exists(init_lua)) {
-                std::cout << "[+] Loaded mod: " << entry.path().filename().string() << std::endl;
-                luamanager->execute_script(init_lua);
-            }
+        if (entry.is_directory())
+            modfolders.push_back(entry.path());
+    }
+    std::sort(modfolders.begin(), modfolders.end(), [](const std::filesystem::path& a, const std::filesystem::path& b) {
+        return a.filename().string() < b.filename().string();
+    });
+    for (const auto& folder : modfolders) {
+        std::string mod_path = folder.string();
+        std::string init_lua = mod_path + "/init.lua";
+        if (std::filesystem::exists(init_lua)) {
+            std::cout << "[+] Loaded mod: " << folder.filename().string() << std::endl;
+            loaded_mods.push_back(folder.filename().string());
+            luamanager->execute_script(init_lua);
         }
-    }    
+    }
 }
 
 // credits https://gist.github.com/danzek/d6a0e4a48a5439e7f808ed1497f6268e

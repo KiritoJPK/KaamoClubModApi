@@ -76,11 +76,16 @@ class MemoryUtils {
             }
         }
 
+        // Returns T{} (0 for numbers) when the memory can't be read. It used to return an
+        // uninitialized buffer, and lua mods receive this value through ReadInt/ReadFloat.
         template <typename T>
         static T Read(uintptr_t address)
         {
-            T buffer;
-            ReadProcessMemory(GetCurrentProcess(), (LPCVOID)address, &buffer, sizeof(T), NULL);
+            T buffer{};
+            SIZE_T bytesread = 0;
+
+            if (!ReadProcessMemory(GetCurrentProcess(), (LPCVOID)address, &buffer, sizeof(T), &bytesread) || bytesread != sizeof(T))
+                return T{};
             return buffer;
         }
 

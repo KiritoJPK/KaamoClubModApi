@@ -29,6 +29,8 @@ class ModApiUtils {
         static std::string gettimestamp(void);
         static std::string getexception_name(DWORD code);
     public:
+        // folder names of the mods that were run, in load order (printed in the crash logs)
+        static inline std::vector<std::string> loaded_mods;
         static void load_mods(LuaManager *luamanager);
         static std::string w2s(const std::wstring& wstr);
         static std::wstring s2w(const std::string& str);

@@ -28,7 +28,11 @@ uintptr_t MemoryUtils::GetPointerAddress(uintptr_t startaddr, const std::vector<
     uintptr_t addr = startaddr;
 
     for (unsigned int i = 0; i < offsets.size(); ++i) {
-        ReadProcessMemory(GetCurrentProcess(), (LPCVOID)addr, &addr, sizeof(addr), NULL);
+        SIZE_T bytesread = 0;
+
+        // a failed read used to keep the previous address and go on with a wrong pointer chain
+        if (!ReadProcessMemory(GetCurrentProcess(), (LPCVOID)addr, &addr, sizeof(addr), &bytesread) || bytesread != sizeof(addr))
+            return 0;
         if (addr == 0)
             return 0;
         addr += offsets[i];

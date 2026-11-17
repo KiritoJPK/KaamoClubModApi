@@ -117,7 +117,7 @@ class Offset {
         static constexpr uintptr_t KIPLAYER_ADDGUN = 0x4A9BD4;
 
         static constexpr uintptr_t SHIP_HASJUMPDRIVE = 0x4C2F11;
-        static constexpr uintptr_t SHIP_SHIP = 0x4C2E2;
+        static constexpr uintptr_t SHIP_SHIP = 0x4C2E2E; // was 0x4C2E2 (typo), 0x4C2E2E is the SEH prologue of the Ship constructor
         static constexpr uintptr_t SHIP_REFRESHVALUE = 0x4C33AD;
         static constexpr uintptr_t SHIP_HASJUMPDRIVEINTEGRATED = 0x4C2F27;
         static constexpr uintptr_t SHIP_SETEQUIPMENT = 0x4C335B;
