@@ -191,8 +191,8 @@ bool LangCompat::set_language(int32_t language)
 {
     if (language < 0 || language >= kLanguageCount)
         return false;
-    void* gt = *reinterpret_cast<void**>(Offset::GLOBALS_GAMETEXT);
-    if (!gt)
+    void* gametextptr = *reinterpret_cast<void**>(Offset::GLOBALS_GAMETEXT);
+    if (!gametextptr)
         return false;
     uintptr_t setfont = Offset::GLOBALS_SETLANGUAGEFONT;
     uintptr_t load = Offset::GAMETEXT_LOADLANGUAGE;
@@ -204,7 +204,7 @@ bool LangCompat::set_language(int32_t language)
         mov eax, language
         call setfont
         push language
-        push gt
+        push gametextptr
         call load
         pop edi
         pop esi
