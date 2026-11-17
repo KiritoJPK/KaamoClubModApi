@@ -3,6 +3,8 @@
 #include <Game/structs.h>
 #include "safety.h"
 #include <cstddef>
+#include <cstring>
+#include <initializer_list>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -211,4 +213,104 @@ bool LangCompat::set_language(int32_t language)
         pop ebx
     }
     return current_language() == language;
+}
+
+// ---- "Português (Brasil)" in the language menu ----
+//
+// The menu (built at 0x4845F0, MenuTouchWindow) creates its buttons from two arrays on the stack:
+// button ids (0x1B + position in the jump table of the click handler) and text ids of the names.
+// The loop runs 11 times. Two reads of those arrays are replaced by calls to the stubs below,
+// that return the values of a 12th entry, and the loop runs 12 times. The click handler (0x48ED40)
+// only knows the button ids 0x1B..0x26, its range check jumps to a stub that adds 0x27.
+namespace {
+
+    constexpr uintptr_t kButtonIdRead = 0x4848EA;  // mov eax, [esp+eax+0x98]
+    constexpr uintptr_t kNameTextRead = 0x484985;  // mov eax, [esp+eax+0xC4]
+    constexpr uintptr_t kLoopCount = 0x484A39;     // cmp dword [esp+0x24], 0Bh (immediate)
+    constexpr uintptr_t kHandlerCheck = 0x48ED46;  // cmp eax, esi / ja 0x48EDE5 / jmp [eax*4+0x48EF62]
+
+    __declspec(naked) void buttonid_stub()
+    {
+        __asm {
+            cmp eax, 0x2C
+            jne normal
+            mov eax, 0x27
+            ret
+        normal:
+            mov eax, [esp + eax + 0x98 + 4] // + 4: return address of the call
+            ret
+        }
+    }
+
+    __declspec(naked) void nametext_stub()
+    {
+        __asm {
+            cmp eax, 0x2C
+            jne normal
+            mov eax, 14
+            ret
+        normal:
+            mov eax, [esp + eax + 0xC4 + 4]
+            ret
+        }
+    }
+
+    __declspec(naked) void handler_stub()
+    {
+        // eax = button id - 0x1B, esi = 0x0B (set by the game right before)
+        __asm {
+            cmp eax, 0x0B
+            ja extra
+            jmp dword ptr [eax * 4 + 0x48EF62] // original jump table
+        extra:
+            cmp eax, 12 // ptl
+            jne skip
+            mov esi, 12 // language index used by the code at 0x48ED81
+            push 0x48ED81 // mov eax, esi / set font / load the language
+            ret
+        skip:
+            push 0x48EDE5 // next button
+            ret
+        }
+    }
+
+    bool bytes_are(uintptr_t addr, std::initializer_list<uint8_t> expected)
+    {
+        const uint8_t* code = reinterpret_cast<const uint8_t*>(addr);
+        size_t i = 0;
+        for (uint8_t b : expected) {
+            if (code[i++] != b)
+                return false;
+        }
+        return true;
+    }
+
+    bool write_branch(uintptr_t site, uint8_t opcode, void* target, size_t size, const char* what)
+    {
+        uint8_t code[16];
+        code[0] = opcode;
+        int32_t rel = static_cast<int32_t>(reinterpret_cast<uintptr_t>(target) - (site + 5));
+        std::memcpy(code + 1, &rel, 4);
+        for (size_t i = 5; i < size; ++i)
+            code[i] = 0x90;
+        return Safety::write_bytes(site, code, size, what);
+    }
+}
+
+void LangCompat::install_language_menu_entry()
+{
+    if (!bytes_are(kButtonIdRead, { 0x8B, 0x84, 0x04, 0x98, 0x00, 0x00, 0x00 })
+        || !bytes_are(kNameTextRead, { 0x8B, 0x84, 0x04, 0xC4, 0x00, 0x00, 0x00 })
+        || !bytes_are(kLoopCount - 4, { 0x83, 0x7C, 0x24, 0x24, 0x0B })
+        || !bytes_are(kHandlerCheck, { 0x3B, 0xC6, 0x0F, 0x87, 0x97, 0x00, 0x00, 0x00, 0xFF, 0x24, 0x85, 0x62, 0xEF, 0x48, 0x00 })
+        || !bytes_are(0x48ED80, { 0x5E, 0x8B, 0xC6 })) {
+        std::cout << "[LangCompat] language menu doesn't look as expected, Português (Brasil) not added" << std::endl;
+        return;
+    }
+    const uint8_t count = 12;
+    if (write_branch(kButtonIdRead, 0xE8, reinterpret_cast<void*>(&buttonid_stub), 7, "language menu button ids")
+        && write_branch(kNameTextRead, 0xE8, reinterpret_cast<void*>(&nametext_stub), 7, "language menu names")
+        && write_branch(kHandlerCheck, 0xE9, reinterpret_cast<void*>(&handler_stub), 15, "language menu click")
+        && Safety::write_bytes(kLoopCount, &count, 1, "language menu entry count"))
+        std::cout << "[LangCompat] Português (Brasil) added to the language menu" << std::endl;
 }
