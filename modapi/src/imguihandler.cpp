@@ -1,6 +1,7 @@
 #include "imguihandler.h"
 #include "eventmanager.h"
 #include "offset.h"
+#include "transformdebug.h"
 #include <windows.h>
 #include <d3d9.h>
 #include <dinput.h>
@@ -304,6 +305,7 @@ void ImGuiHandler::init(LuaManager *luamanager)
     MH_STATUS enablestatus = MH_EnableHook(MH_ALL_HOOKS);
     if (enablestatus != MH_OK)
         std::cout << "[-] ImGuiHandler: MH_EnableHook failed: " << MH_StatusToString(enablestatus) << std::endl;
+    TransformDebug::register_window();
 }
 
 void ImGuiHandler::shutdown()
