@@ -22,5 +22,20 @@ namespace LangCompat {
     // reads the text like GameText::getText does, using the translated id.
     // returns nullptr when the game hasn't loaded texts yet or the id is out of range
     AEString* get_text(int32_t pcid);
+
+    // GameText::loadLanguage (0x4F7950) has the number of texts hard coded (3361). The hook counts
+    // the texts of the file that is going to be loaded and sets that number before the game reads it,
+    // otherwise the game drops the last texts of bigger files and frees every text of smaller ones.
+    using loadlanguage_t = void(__stdcall*)(void* gametext, int32_t language);
+    inline loadlanguage_t original_loadlanguage = nullptr;
+    void __stdcall loadlanguage_hook(void* gametext, int32_t language);
+
+    // index used by the game: 0 gb, 1 de, 2 fr, 3 it, 4 es, 5 ru, 6 pl, 7 pt, 8 cz, 9 ar,
+    // 10 zs, 11 zt, 12 ptl (Portugues - Brasil), 13 mex, 14 ko, 15 ja
+    constexpr int32_t kLanguageCount = 16;
+    const char* language_file(int32_t language);
+    int32_t current_language();
+    // Loads another language like the options menu does. Call it from the game thread (Lua events).
+    bool set_language(int32_t language);
 }
 #endif
