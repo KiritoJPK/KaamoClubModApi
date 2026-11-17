@@ -1,8 +1,13 @@
 #include "langcompat.h"
 #include "offset.h"
 #include <Game/structs.h>
+#include "safety.h"
 #include <cstddef>
+#include <fstream>
 #include <iostream>
+#include <iterator>
+#include <string>
+#include <vector>
 
 namespace {
     // GameText object, see GameText::getText (0x4F38B0)
@@ -88,4 +93,122 @@ AEString* LangCompat::get_text(int32_t pcid)
     if (id < 0 || id >= gt->textcount)
         return nullptr;
     return gt->texts[id];
+}
+
+namespace {
+    // the three places of GameText::loadLanguage that hold the number of texts
+    constexpr uintptr_t kCountSite = 0x4F7998;       // mov eax, 3361 (size of the text array)
+    constexpr uintptr_t kClearLoopSite = 0x4F79C9;   // cmp eax, 3361 * 4 (array clear loop)
+    constexpr uintptr_t kReadLoopSite = 0x4F834B;    // cmp eax, 3361 * 4 (read loop, in GameText::read)
+    constexpr int32_t kMaxTextCount = 20000;
+    int32_t g_capacity = LangCompat::kPCTextCount;
+    bool g_capacitybroken = false;
+
+    const char* const kLanguageFiles[LangCompat::kLanguageCount] = {
+        "gb.lang", "de.lang", "fr.lang", "it.lang", "es.lang", "ru.lang", "pl.lang", "pt.lang",
+        "cz.lang", "ar.lang", "zs.lang", "zt.lang", "ptl.lang", "mex.lang", "ko.lang", "ja.lang"
+    };
+
+    // number of texts of a .lang file (uint16 big endian byte length + utf8 text, repeated), -1 if invalid
+    int32_t count_texts(const std::string& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        if (!file)
+            return -1;
+        std::vector<unsigned char> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        size_t pos = 0;
+        int32_t count = 0;
+        while (pos + 2 <= data.size()) {
+            size_t length = (static_cast<size_t>(data[pos]) << 8) | data[pos + 1];
+            pos += 2 + length;
+            ++count;
+        }
+        return pos == data.size() && count > 0 ? count : -1;
+    }
+
+    bool read_imm32(uintptr_t site, uint8_t opcode, int32_t& value)
+    {
+        const uint8_t* code = reinterpret_cast<const uint8_t*>(site);
+        if (code[0] != opcode)
+            return false;
+        value = *reinterpret_cast<const int32_t*>(site + 1);
+        return true;
+    }
+
+    bool set_capacity(int32_t count)
+    {
+        if (g_capacitybroken)
+            return false;
+        if (count == g_capacity)
+            return true;
+        int32_t size = 0, clearloop = 0, readloop = 0;
+        // check the code is still the one this was written for before touching it
+        if (!read_imm32(kCountSite, 0xB8, size) || !read_imm32(kClearLoopSite, 0x3D, clearloop) || !read_imm32(kReadLoopSite, 0x3D, readloop)
+            || size != g_capacity || clearloop != g_capacity * 4 || readloop != g_capacity * 4) {
+            std::cout << "[LangCompat] GameText::loadLanguage doesn't look as expected, text count not changed" << std::endl;
+            g_capacitybroken = true;
+            return false;
+        }
+        int32_t bytes = count * 4;
+        if (!Safety::write_bytes(kCountSite + 1, &count, 4, "text count")
+            || !Safety::write_bytes(kClearLoopSite + 1, &bytes, 4, "text count (clear loop)")
+            || !Safety::write_bytes(kReadLoopSite + 1, &bytes, 4, "text count (read loop)")) {
+            g_capacitybroken = true;
+            return false;
+        }
+        g_capacity = count;
+        return true;
+    }
+}
+
+const char* LangCompat::language_file(int32_t language)
+{
+    // the game loads gb.lang for every unknown index
+    if (language < 0 || language >= kLanguageCount)
+        return kLanguageFiles[0];
+    return kLanguageFiles[language];
+}
+
+int32_t LangCompat::current_language()
+{
+    return *reinterpret_cast<int16_t*>(Offset::GLOBALS_LANGUAGE);
+}
+
+void __stdcall LangCompat::loadlanguage_hook(void* gametext, int32_t language)
+{
+    const std::string folder = "data\\assets\\main\\lang\\";
+    int16_t index = static_cast<int16_t>(language);
+    int32_t count = count_texts(folder + language_file(index));
+    // the game falls back to gb.lang when the file can't be loaded
+    if (count < 0)
+        count = count_texts(folder + language_file(0));
+    if (count > 0 && count <= kMaxTextCount && set_capacity(count))
+        std::cout << "[LangCompat] loading " << language_file(index) << " with " << count << " texts" << std::endl;
+    original_loadlanguage(gametext, language);
+}
+
+bool LangCompat::set_language(int32_t language)
+{
+    if (language < 0 || language >= kLanguageCount)
+        return false;
+    void* gametextptr = *reinterpret_cast<void**>(Offset::GLOBALS_GAMETEXT);
+    if (!gametextptr)
+        return false;
+    uintptr_t setfont = Offset::GLOBALS_SETLANGUAGEFONT;
+    uintptr_t load = Offset::GAMETEXT_LOADLANGUAGE;
+    // same calls as the language menu of the options
+    __asm {
+        push ebx
+        push esi
+        push edi
+        mov eax, language
+        call setfont
+        push language
+        push gametextptr
+        call load
+        pop edi
+        pop esi
+        pop ebx
+    }
+    return current_language() == language;
 }

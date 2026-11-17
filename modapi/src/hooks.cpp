@@ -2119,6 +2119,7 @@ void Hooks::init()
     //MH_CreateHook((LPVOID)Offset::STANDING_ISENEMY, &standing_isenemy_hook, (LPVOID*)&old_standingisenemy);
     MH_CreateHook((LPVOID)Offset::ABYSSENGINE_PAINTCANVAS_SETCOLOR, &abyssengine_paintcanvas_setcolor_hook, (LPVOID*)&old_abyssenginepaintcanvassetcolor);
     MH_CreateHook((LPVOID)Offset::GAMETEXT_GETTEXT, &gametext_gettext_hook, (LPVOID*)&old_gametextgettext);
+    MH_CreateHook((LPVOID)Offset::GAMETEXT_LOADLANGUAGE, &LangCompat::loadlanguage_hook, (LPVOID*)&LangCompat::original_loadlanguage);
     MH_CreateHook((LPVOID)Offset::RECORDHANDLER_RECORDSTOREWRITE, &recordhandler_recordstorewrite_hook, (LPVOID*)&old_recordhandlerrecordstorewrite);
     MH_CreateHook((LPVOID)Offset::LEVEL_CREATEGUN, &level_creategun_hook, (LPVOID*)&old_levelcreategun);
     //MH_CreateHook((LPVOID)Offset::LEVEL_CREATESHIP, &level_createship_hook, (LPVOID*)&old_levelcreateship);

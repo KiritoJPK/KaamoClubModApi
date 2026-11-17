@@ -1,4 +1,5 @@
 #include <windows.h>
+#include "langcompat.h"
 #include <iostream>
 #include <cstdint>
 #include <cstdio>
@@ -391,6 +392,13 @@ void LuaManager::bind_api()
         sol::no_constructor,
         "SetCurrentApplicationModule", [](Engine& self, int id)  {
             Engine::setcurrentapplicationmodule(id);
+        },
+        // 0 gb, 1 de, 2 fr, 3 it, 4 es, 5 ru, 6 pl, 7 pt, 8 cz, 9 ar, 10 zs, 11 zt, 12 ptl, 13 mex, 14 ko, 15 ja
+        "SetLanguage", [](Engine& self, int language) -> bool {
+            return LangCompat::set_language(language);
+        },
+        "GetLanguage", [](Engine& self) -> int {
+            return LangCompat::current_language();
         }
     );
 
