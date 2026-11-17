@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -151,6 +152,81 @@ namespace {
                 std::snprintf(label, sizeof(label), "M%u", static_cast<unsigned>(m));
                 write_raw(f, label, info.meshptrs[m], 0x60);
             }
+        }
+        // AEGeometry objects that own one of these transforms: +0x0C transform, +0x10/+0x14 last two children,
+        // +0x2C PaintCanvas, +0x50 LOD count, +0x54 LOD transforms, +0x58 LOD child transforms.
+        // Objects that point to such a geometry at +0x108 (PlayerStation keeps it there, +0x10C = emitters).
+        uintptr_t canvas = 0;
+        rd(kCanvas, canvas);
+        std::vector<uintptr_t> geometries;
+        std::fprintf(f, "\n=== AEGeometry objects (heap scan) ===\n");
+        MEMORY_BASIC_INFORMATION mbi{};
+        uintptr_t address = 0x10000;
+        while (address < 0x7FFF0000 && VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi)) == sizeof(mbi)) {
+            uintptr_t base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
+            uintptr_t next = base + mbi.RegionSize;
+            bool readable = mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && !(mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))
+                && (mbi.Protect & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE));
+            if (readable && canvas) {
+                std::vector<uint8_t> region(mbi.RegionSize);
+                if (rdbuf(base, region.data(), region.size())) {
+                    for (size_t o = 0; o + 0x68 <= region.size(); o += 4) {
+                        uint32_t cv, tr, lods;
+                        std::memcpy(&cv, &region[o + 0x2C], 4);
+                        if (cv != canvas)
+                            continue;
+                        std::memcpy(&tr, &region[o + 0x0C], 4);
+                        std::memcpy(&lods, &region[o + 0x50], 4);
+                        if (tr >= infos.size() || lods > 8)
+                            continue;
+                        uint32_t c10, c14, a54, a58;
+                        std::memcpy(&c10, &region[o + 0x10], 4);
+                        std::memcpy(&c14, &region[o + 0x14], 4);
+                        std::memcpy(&a54, &region[o + 0x54], 4);
+                        std::memcpy(&a58, &region[o + 0x58], 4);
+                        uintptr_t g = base + o;
+                        geometries.push_back(g);
+                        std::fprintf(f, "geometry %08X transform=%u child10=%d child14=%d lods=%u", static_cast<unsigned>(g), tr,
+                            static_cast<int>(c10), static_cast<int>(c14), lods);
+                        for (uint32_t l = 0; l < lods; ++l) {
+                            uint32_t lt = 0, lc = 0;
+                            rd(a54 + l * 4, lt);
+                            if (a58)
+                                rd(a58 + l * 4, lc);
+                            std::fprintf(f, " lod%u=%d lodchild%u=%d", l, static_cast<int>(lt), l, a58 ? static_cast<int>(lc) : -1);
+                        }
+                        std::fprintf(f, "\n");
+                    }
+                }
+            }
+            if (next <= address)
+                break;
+            address = next;
+        }
+        std::fprintf(f, "\n=== objects pointing to a geometry at +0x108 ===\n");
+        address = 0x10000;
+        while (!geometries.empty() && address < 0x7FFF0000 && VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi)) == sizeof(mbi)) {
+            uintptr_t base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
+            uintptr_t next = base + mbi.RegionSize;
+            bool readable = mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && !(mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))
+                && (mbi.Protect & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE));
+            if (readable) {
+                std::vector<uint8_t> region(mbi.RegionSize);
+                if (rdbuf(base, region.data(), region.size())) {
+                    for (size_t o = 0; o + 0x110 <= region.size(); o += 4) {
+                        uint32_t g;
+                        std::memcpy(&g, &region[o + 0x108], 4);
+                        if (std::find(geometries.begin(), geometries.end(), g) == geometries.end())
+                            continue;
+                        uint32_t emitters;
+                        std::memcpy(&emitters, &region[o + 0x10C], 4);
+                        std::fprintf(f, "object %08X geometry=%08X +0x10C=%d\n", static_cast<unsigned>(base + o), g, static_cast<int>(emitters));
+                    }
+                }
+            }
+            if (next <= address)
+                break;
+            address = next;
         }
         std::fclose(f);
         g_infos = std::move(infos);
