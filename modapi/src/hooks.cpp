@@ -2205,6 +2205,7 @@ void Hooks::init()
         return;
     }
     std::cout << "[+] " << (Safety::hooks().size() - Safety::failed_hook_count()) << "/" << Safety::hooks().size() << " game hooks installed" << std::endl;
+    LangCompat::install_language_menu_entry();
 }
 
 /*

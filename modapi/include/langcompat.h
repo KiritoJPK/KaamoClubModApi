@@ -37,5 +37,9 @@ namespace LangCompat {
     int32_t current_language();
     // Loads another language like the options menu does. Call it from the game thread (Lua events).
     bool set_language(int32_t language);
+
+    // Adds "Português (Brasil)" (ptl.lang, index 12) to the language list of the menu.
+    // The exe of the PC knows this language but its menu only has 11 entries.
+    void install_language_menu_entry();
 }
 #endif
