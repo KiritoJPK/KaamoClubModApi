@@ -221,7 +221,7 @@ bool LangCompat::set_language(int32_t language)
 // The menu (built at 0x4845F0, MenuTouchWindow) creates its buttons from two arrays on the stack:
 // button ids (0x1B + position in the jump table of the click handler) and text ids of the names.
 // The loop runs 11 times. Two reads of those arrays are replaced by calls to the stubs below,
-// that return the values of a 12th entry, and the loop runs 12 times. The click handler (0x48ED40)
+// that insert a 12th entry after Русский, and the loop runs 12 times. The click handler (0x48ED40)
 // only knows the button ids 0x1B..0x26, its range check jumps to a stub that adds 0x27.
 namespace {
 
@@ -233,12 +233,17 @@ namespace {
     __declspec(naked) void buttonid_stub()
     {
         __asm {
-            cmp eax, 0x2C
-            jne normal
-            mov eax, 0x27
-            ret
+            // eax = position * 4. Português goes to position 7 (after Русский),
+            // the entries from there on move one position down
+            cmp eax, 0x1C
+            jb normal
+            je extra
+            sub eax, 4
         normal:
             mov eax, [esp + eax + 0x98 + 4] // + 4: return address of the call
+            ret
+        extra:
+            mov eax, 0x27
             ret
         }
     }
@@ -246,12 +251,15 @@ namespace {
     __declspec(naked) void nametext_stub()
     {
         __asm {
-            cmp eax, 0x2C
-            jne normal
-            mov eax, 14
-            ret
+            cmp eax, 0x1C
+            jb normal
+            je extra
+            sub eax, 4
         normal:
             mov eax, [esp + eax + 0xC4 + 4]
+            ret
+        extra:
+            mov eax, 14
             ret
         }
     }
