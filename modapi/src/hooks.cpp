@@ -5,6 +5,7 @@
 #include "safety.h"
 #include "langcompat.h"
 #include "datapaths.h"
+#include "gatefix.h"
 #include <Game/system.h>
 #include <Game/level.h>
 #include <Game/ship.h>
@@ -1214,7 +1215,9 @@ void __thiscall Hooks::mgame_onrender2d_hook(int *a1)
 
 unsigned int __stdcall Hooks::level_createspace_hook(int *a1)
 {
-    return old_levelcreatespace(a1);
+    unsigned int result = old_levelcreatespace(a1);
+    GateFix::after_createspace(reinterpret_cast<uintptr_t>(a1));
+    return result;
 }
 
 void __thiscall Hooks::status_nextcampaignmission_hook(int *a1)
@@ -2151,7 +2154,7 @@ void Hooks::init()
     MH_CreateHook((LPVOID)Offset::MODMAINMENU_ONRENDER2D, (LPVOID)&modmainmenu_onrender2d_hook, (LPVOID*)&old_modmainmenuonrender2d);
     //MH_CreateHook((LPVOID)Offset::LEVEL_CREATESTATICOBJECT, (LPVOID)&level_createstaticobject_hook, (LPVOID*)&old_levelcreatestaticobject);
     MH_CreateHook((LPVOID)Offset::MGAME_ONRENDER2D, (LPVOID)&mgame_onrender2d_hook, (LPVOID*)&old_mgameonrender2d);
-    //MH_CreateHook((LPVOID)Offset::LEVEL_CREATESPACE, (LPVOID)&level_createspace_hook, (LPVOID*)&old_levelcreatespace);
+    MH_CreateHook((LPVOID)Offset::LEVEL_CREATESPACE, (LPVOID)&level_createspace_hook, (LPVOID*)&old_levelcreatespace);
     //MH_CreateHook((LPVOID)Offset::STATUS_NEXTCAMPAIGNMISSION, (LPVOID)&status_nextcampaignmission_hook, (LPVOID*)&old_statusnextcampaignmission);
     MH_CreateHook((LPVOID)Offset::STARMAP_INIT, (LPVOID)&starmap_init_hook, (LPVOID*)&old_starmapinit);
     //MH_CreateHook((LPVOID)Offset::STARMAP_STARMAP, (LPVOID)&starmap_starmap_hook, (LPVOID*)&old_starmapstarmap);
