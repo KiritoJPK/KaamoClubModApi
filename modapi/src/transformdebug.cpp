@@ -1,6 +1,7 @@
 #include "transformdebug.h"
 #include "imguihandler.h"
 #include "offset.h"
+#include "gatefix.h"
 #include <imgui.h>
 #include <windows.h>
 #include <cstdint>
@@ -332,6 +333,7 @@ namespace {
             dump();
         ImGui::SameLine();
         ImGui::TextUnformatted(g_status.c_str());
+        GateFix::draw_panel();
         ImGui::Separator();
         for (const Info& info : g_infos) {
             if (info.childptrs.empty())

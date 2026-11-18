@@ -1,3 +1,4 @@
+#include "gatefix.h"
 #include "imguihandler.h"
 #include "eventmanager.h"
 #include "offset.h"
@@ -196,6 +197,7 @@ static HRESULT WINAPI endscene_hook(IDirect3DDevice9 *dev)
         _luamanager->update(dt); // LuaManager is here because I can't make a new thread with the lua update + the imgui due to of the lua bindings of imgui, mutex won't work here
         EventManager::trigger_events();
     }
+    GateFix::tick();
     for (auto& win : windows) {
         if (win.togglekey <= 0 || win.togglekey >= 256)
             continue;
